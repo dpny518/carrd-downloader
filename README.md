@@ -21,9 +21,8 @@ This project is a Node.js script designed to download the HTML content of a Carr
    cd carrd-downloader
    npm install
    ```
-   Set up environment variables:
-
-2. Create a .env file in the root directory of your project and add the following content:
+ 2. Set up environment variables:
+ Create a .env file in the root directory of your project and add the following content:
 
   ```bash
 CARRD_URL=https://your-carrd-site-url.com

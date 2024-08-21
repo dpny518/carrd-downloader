@@ -1,11 +1,12 @@
+require('dotenv').config(); // Load environment variables from .env file
 const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
+const { URL } = require('url');
 
 // Configuration
-const CARRD_URL = 'https://your-carrd-site-url.com'; // Replace with your Carrd URL
-const USER_PASSWORD = 'your-password'; // Replace with your password
-const OUTPUT_DIR = './public'; // Directory to save the HTML file
+const CARRD_URL = process.env.CARRD_URL; // Carrd URL from .env
+const OUTPUT_DIR = './public'; // Directory to save the HTML and media files
 
 // Function to fetch HTML content
 async function fetchHTML(url) {
@@ -32,18 +33,63 @@ function saveHTML(content, filePath) {
     }
 }
 
+// Function to download media files and save them locally
+async function saveMedia(mediaUrl, outputDir) {
+    const urlObj = new URL(mediaUrl, CARRD_URL); // Convert relative URL to absolute
+    const fileName = path.basename(urlObj.pathname); // Extract filename
+    const filePath = path.join(outputDir, fileName);
+
+    try {
+        const response = await fetch(urlObj.href);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch media from ${urlObj.href}: ${response.statusText}`);
+        }
+        const buffer = await response.buffer();
+        fs.writeFileSync(filePath, buffer);
+        console.log(`Media content saved to ${filePath}`);
+        return `./media/${fileName}`;
+    } catch (error) {
+        console.error('Error saving media:', error);
+        return null;
+    }
+}
+
+// Function to process HTML and download media files
+async function processHTML(htmlContent) {
+    const outputDir = path.join(OUTPUT_DIR, 'media');
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+    }
+
+    // Replace media URLs in HTML content and download media
+    const mediaUrlRegex = /<img\s+[^>]*src="([^"]+)"|<video\s+[^>]*src="([^"]+)"|<source\s+[^>]*src="([^"]+)"|url\(\s*['"]?([^'"\)]+\.(jpg|jpeg|png|gif|svg|mp4|webm|ogg))['"]?\s*\)/gi;
+    let modifiedHTML = htmlContent;
+
+    const matches = htmlContent.matchAll(mediaUrlRegex);
+    for (const match of matches) {
+        const mediaUrl = match[1] || match[2] || match[3] || match[4];
+        if (mediaUrl) {
+            const absoluteMediaUrl = new URL(mediaUrl, CARRD_URL).href; // Ensure absolute URL
+            const localFilePath = await saveMedia(absoluteMediaUrl, outputDir);
+            if (localFilePath) {
+                modifiedHTML = modifiedHTML.replace(mediaUrl, localFilePath);
+            }
+        }
+    }
+
+    return modifiedHTML;
+}
+
 // Main function to download and process the website
 async function main() {
     if (!fs.existsSync(OUTPUT_DIR)) {
         fs.mkdirSync(OUTPUT_DIR);
     }
 
-    const htmlContent = await fetchHTML(CARRD_URL);
+    let htmlContent = await fetchHTML(CARRD_URL);
+    htmlContent = await processHTML(htmlContent);
 
-    // Optionally, add more processing of HTML content here
-    // For example, updating media links or other modifications
-
-    // Save HTML to file
+    // Save processed HTML to file
     const outputPath = path.join(OUTPUT_DIR, 'index.html');
     saveHTML(htmlContent, outputPath);
 }
